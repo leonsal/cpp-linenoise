@@ -1,7 +1,12 @@
 #include <iostream>
+#include <thread>
+#include <atomic>
+#include <chrono>
 #include "../linenoise.hpp"
 
 using namespace std;
+
+std::atomic<bool> runThread{true};
 
 int main(int argc, const char** argv)
 {
@@ -24,6 +29,16 @@ int main(int argc, const char** argv)
             completions.push_back("hello there");
 #endif
         }
+    });
+
+    // Creates thread to send asynchronous messages to the console
+    std::thread t([]() {
+        auto count = 1;
+        while (runThread) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            linenoise::PrintBefore("Message:" + std::to_string(count++) + " from thread\n");
+        }
+        linenoise::PrintBefore("Message thread finished\n");
     });
 
     // Load history
@@ -49,6 +64,10 @@ int main(int argc, const char** argv)
         // Save history
         linenoise::SaveHistory(path);
     }
+
+    // Stop and wait message thread to finish
+    runThread = false;
+    t.join();
 
     return 0;
 }
