@@ -156,6 +156,7 @@
 #include <functional>
 #include <vector>
 #include <iostream>
+#include <mutex>
 
 namespace linenoise {
 
@@ -2087,6 +2088,9 @@ inline void linenoiseEditDeletePrevWord(struct linenoiseState *l) {
     refreshLine(l);
 }
 
+static struct linenoiseState l;
+static std::mutex mutPrintBefore;
+
 /* This function is the core of the line editing capability of linenoise.
  * It expects 'fd' to be already in "raw mode" so that every key pressed
  * will be returned ASAP to read().
@@ -2097,7 +2101,7 @@ inline void linenoiseEditDeletePrevWord(struct linenoiseState *l) {
  * The function returns the length of the current buffer. */
 inline int linenoiseEdit(int stdin_fd, int stdout_fd, char *buf, int buflen, const char *prompt)
 {
-    struct linenoiseState l;
+    //struct linenoiseState l;
 
     /* Populate the linenoise state that we pass to functions implementing
      * specific editing functionalities. */
@@ -2136,6 +2140,8 @@ inline int linenoiseEdit(int stdin_fd, int stdout_fd, char *buf, int buflen, con
         nread = unicodeReadUTF8Char(l.ifd,cbuf,&c);
 #endif
         if (nread <= 0) return (int)l.len;
+
+        std::lock_guard<std::mutex> guard(mutPrintBefore);
 
         /* Only autocomplete when the callback is set. It returns < 0 when
          * there was an error reading from fd. Otherwise it will return the
@@ -2401,6 +2407,21 @@ inline bool LoadHistory(const char* path) {
 
 inline const std::vector<std::string>& GetHistory() {
     return history;
+}
+
+// Print lines before the line being edited
+inline int PrintBefore(const std::string& lines) {
+
+    std::string seq;
+    seq = "\r";         // set cursor to beginning of line
+    seq += "\x1b[0K";   // erase to right
+    seq += "\r";        // set cursor to beginning of line
+    seq += lines;
+
+    std::lock_guard<std::mutex> guard(mutPrintBefore);
+    int res = write(l.ofd, seq.c_str(), seq.size());
+    refreshLine(&l);
+    return res;
 }
 
 } // namespace linenoise
